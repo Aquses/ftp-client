@@ -1,5 +1,8 @@
 package assignment3;
 
+import java.io.BufferedInputStream;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -8,8 +11,7 @@ import java.net.SocketAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 
-public class TFTPServer 
-{
+public class TFTPServer {
 	public static final int TFTPPORT = 4970;
 	public static final int BUFSIZE = 516;
 	public static final String READDIR = "/home/username/read/"; //custom address at your PC
@@ -22,23 +24,21 @@ public class TFTPServer
 	public static final int OP_ERR = 5;
 
 	public static void main(String[] args) {
-		if (args.length > 0) 
-		{
+		if (args.length > 0) {
 			System.err.printf("usage: java %s\n", TFTPServer.class.getCanonicalName());
 			System.exit(1);
 		}
 		//Starting the server
-		try 
-		{
+		try {
 			TFTPServer server= new TFTPServer();
 			server.start();
 		}
-		catch (SocketException e) 
-			{e.printStackTrace();}
+		catch (SocketException e) {
+			e.printStackTrace();
+		}
 	}
 	
-	private void start() throws SocketException 
-	{
+	private void start() throws SocketException {
 		byte[] buf= new byte[BUFSIZE];
 		
 		// Create socket
@@ -51,8 +51,7 @@ public class TFTPServer
 		System.out.printf("Listening at port %d for new requests\n", TFTPPORT);
 
 		// Loop to handle client requests 
-		while (true) 
-		{        
+		while (true) {        
 			
 			final InetSocketAddress clientAddress = receiveFrom(socket, buf);
 			
@@ -63,12 +62,9 @@ public class TFTPServer
 			final StringBuffer requestedFile= new StringBuffer();
 			final int reqtype = ParseRQ(buf, requestedFile);
 
-			new Thread() 
-			{
-				public void run() 
-				{
-					try 
-					{
+			new Thread() {
+				public void run() {
+					try {
 						DatagramSocket sendSocket= new DatagramSocket(0);
 
 						// Connect to client
@@ -79,21 +75,20 @@ public class TFTPServer
 								clientAddress.getHostName(), clientAddress.getPort());  
 								
 						// Read request
-						if (reqtype == OP_RRQ) 
-						{      
+						if (reqtype == OP_RRQ) {      
 							requestedFile.insert(0, READDIR);
 							HandleRQ(sendSocket, requestedFile.toString(), OP_RRQ);
 						}
 						// Write request
-						else 
-						{                       
+						else {                       
 							requestedFile.insert(0, WRITEDIR);
 							HandleRQ(sendSocket,requestedFile.toString(),OP_WRQ);  
 						}
 						sendSocket.close();
 					} 
-					catch (SocketException e) 
-						{e.printStackTrace();}
+					catch (SocketException e) {
+						e.printStackTrace();
+					}
 				}
 			}.start();
 		}
@@ -105,8 +100,7 @@ public class TFTPServer
 	 * @param buf (where to store the read data)
 	 * @return socketAddress (the socket address of the client)
 	 */
-	private InetSocketAddress receiveFrom(DatagramSocket socket, byte[] buf) 
-	{
+	private InetSocketAddress receiveFrom(DatagramSocket socket, byte[] buf) {
 		// Create datagram packet
 		DatagramPacket packet = new DatagramSocket(buf, buf.length);
 		
@@ -126,13 +120,15 @@ public class TFTPServer
 	 * @param requestedFile (name of file to read/write)
 	 * @return opcode (request type: RRQ or WRQ)
 	 */
-	private int ParseRQ(byte[] buf, StringBuffer requestedFile) 
-	{
+	private int ParseRQ(byte[] buf, StringBuffer requestedFile) {
 		// See "TFTP Formats" in TFTP specification for the RRQ/WRQ request contents
-		// source: https://coursepress.lnu.se/kurs/computer-networks-an-introduction/tftp-server-implementation-guidelines/index.html
 
 		ByteBuffer wrap = ByteBuffer.wrap(buf);
 		short opcode = wrap.getShort();
+
+		byte[] fileNameBytes = new byte[buf.length - 2];
+		wrap.get(fileNameBytes);
+		requestedFile.append(new String(fileNameBytes));
 		
 		return opcode;
 	}
@@ -144,8 +140,7 @@ public class TFTPServer
 	 * @param requestedFile (name of file to read/write)
 	 * @param opcode (RRQ or WRQ)
 	 */
-	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) 
-	{		
+	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) {		
 		if(opcode == OP_RRQ) {
 			// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
 			boolean result = send_DATA_receive_ACK(params);
@@ -164,13 +159,50 @@ public class TFTPServer
 	/**
 	To be implemented
 	*/
-	private boolean send_DATA_receive_ACK(params)
-	{return true;}
+	private boolean send_DATA_receive_ACK(DatagramSocket clientSocket, String requestedFile) {
+
+		FileInputStream fis = new FileInputStream(requestedFile);
+		BufferedInputStream bis = new BufferedInputStream(fis);
+		byte[] buffer = new byte[BUFSIZE];
+		int bytesRead;
+
+
+		while((bytesRead = bis.read(buffer)) != -1) {
+
+		}
+
+
+		return true;
+	}
+
+	private void send_DATA(DatagramSocket socket, byte[] data, int length, int blockNum) {
+		
+	}
 	
-	private boolean receive_DATA_send_ACK(params)
-	{return true;}
+	private boolean receive_DATA_send_ACK() {
+		final int BUFSIZE = 516;
+
+		try {
+			// Received packets.
+			byte[] buf = new byte[BUFSIZE];
+			DatagramPacket receivedPacket = new DatagramPacket(buf, buf.length);
+			socket.receive(receivedPacket);
+
+			if (receivedPacket.getLength() == 0) {
+				
+			}
+
+
+
+		} catch (IOException e){
+			// TODO: send_ERR
+		}
+
+		return true;
+	}
 	
-	private void send_ERR(params)
-	{}
+	private void send_ERR() {
+
+	}
 	
 }
