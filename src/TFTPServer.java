@@ -6,6 +6,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.SocketException;
+import java.nio.ByteBuffer;
 
 public class TFTPServer 
 {
@@ -107,10 +108,9 @@ public class TFTPServer
 	private InetSocketAddress receiveFrom(DatagramSocket socket, byte[] buf) 
 	{
 		// Create datagram packet
-		DatagramPacket packet = new DatagramSocket(buf, );
+		DatagramPacket packet = new DatagramSocket(buf, buf.length);
 		
 		// Receive packet
-
 		socket.receive(packet);
 		
 		// Get client address and port from the packet
@@ -129,6 +129,10 @@ public class TFTPServer
 	private int ParseRQ(byte[] buf, StringBuffer requestedFile) 
 	{
 		// See "TFTP Formats" in TFTP specification for the RRQ/WRQ request contents
+		// source: https://coursepress.lnu.se/kurs/computer-networks-an-introduction/tftp-server-implementation-guidelines/index.html
+
+		ByteBuffer wrap = ByteBuffer.wrap(buf);
+		short opcode = wrap.getShort();
 		
 		return opcode;
 	}
@@ -142,17 +146,14 @@ public class TFTPServer
 	 */
 	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) 
 	{		
-		if(opcode == OP_RRQ)
-		{
+		if(opcode == OP_RRQ) {
 			// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
 			boolean result = send_DATA_receive_ACK(params);
 		}
-		else if (opcode == OP_WRQ) 
-		{
+		else if (opcode == OP_WRQ) {
 			boolean result = receive_DATA_send_ACK(params);
 		}
-		else 
-		{
+		else {
 			System.err.println("Invalid request. Sending an error packet.");
 			// See "TFTP Formats" in TFTP specification for the ERROR packet contents
 			send_ERR(params);
@@ -173,6 +174,3 @@ public class TFTPServer
 	{}
 	
 }
-
-
-
