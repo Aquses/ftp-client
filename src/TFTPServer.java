@@ -177,6 +177,7 @@ public class TFTPServer {
 			send_DATA(clientSocket, buffer, bytesRead, bytesRead);
 
 			// Receive Acknowledgment.
+			receive_ACK(clientSocket);
 		}
 
 
@@ -184,16 +185,35 @@ public class TFTPServer {
 	}
 
 	private void send_DATA(DatagramSocket socket, byte[] data, int length, int blockNum) {
+		// TODO: Error handling.
+		try {
+			// Bytebuffer array
+			ByteBuffer bufferArray = ByteBuffer.allocate(4 + length); // length will ensure bytebuffer has enough space to accomodate.
+			bufferArray.putShort((short) OP_DAT); // putShort takes 16-bit integers.
+			// blockNum is crucial to send.
+			bufferArray.putShort(blockNum);
+			bufferArray.put(data);
 
-		// Bytebuffer array
-		ByteBuffer bufferArray = ByteBuffer.allocate(4 + length); // length will ensure bytebuffer has enough space to accomodate.
-		bufferArray.putShort((short) OP_DAT); // putShort takes 16-bit integers.
-		// blockNum is crucial to send.
-		bufferArray.putShort(blockNum);
-		bufferArray.put(data);
+			DatagramPacket packet = new DatagramPacket(bufferArray.array(), bufferArray.position(), socket.getRemoteSocketAddress());
+			socket.send(packet);
+		} catch (IOException e) {
 
-		DatagramPacket packet = new DatagramPacket(bufferArray.array(), bufferArray.position(), socket.getRemoteSocketAddress());
-		socket.send(packet);
+		}
+	}
+
+	private void receive_ACK(DatagramPacket socket) {
+		// TODO: Error handlings, Handling timeout or retransmission.
+		byte[] buf = new byte[4];
+		DatagramPacket receivedAcknowledgment = new DatagramPacket(buf, buf.length);
+
+		try {
+			socket.receive(receivedAcknowledgment);
+
+		} catch (IOException e) {
+
+		}
+		ByteBuffer bufferArray = ByteBuffer.wrap(receivedAcknowledgment.getData());
+
 	}
 	
 	private boolean receive_DATA_send_ACK() {
