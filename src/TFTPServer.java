@@ -17,6 +17,11 @@ public class TFTPServer {
 	public static final String READDIR = "/home/username/read/"; //custom address at your PC
 	public static final String WRITEDIR = "/home/username/write/"; //custom address at your PC
 	// OP codes
+	// 1     Read request (RRQ)
+	// 2     Write request (WRQ)
+	// 3     Data (DATA)
+	// 4     Acknowledgment (ACK)
+	// 5     Error (ERROR)
 	public static final int OP_RRQ = 1;
 	public static final int OP_WRQ = 2;
 	public static final int OP_DAT = 3;
@@ -168,7 +173,10 @@ public class TFTPServer {
 
 
 		while((bytesRead = bis.read(buffer)) != -1) {
+			// Send file.
+			send_DATA(clientSocket, buffer, bytesRead, bytesRead);
 
+			// Receive Acknowledgment.
 		}
 
 
@@ -176,7 +184,16 @@ public class TFTPServer {
 	}
 
 	private void send_DATA(DatagramSocket socket, byte[] data, int length, int blockNum) {
-		
+
+		// Bytebuffer array
+		ByteBuffer bufferArray = ByteBuffer.allocate(4 + length); // length will ensure bytebuffer has enough space to accomodate.
+		bufferArray.putShort((short) OP_DAT); // putShort takes 16-bit integers.
+		// blockNum is crucial to send.
+		bufferArray.putShort(blockNum);
+		bufferArray.put(data);
+
+		DatagramPacket packet = new DatagramPacket(bufferArray.array(), bufferArray.position(), socket.getRemoteSocketAddress());
+		socket.send(packet);
 	}
 	
 	private boolean receive_DATA_send_ACK() {
