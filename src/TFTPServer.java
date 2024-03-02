@@ -2,6 +2,7 @@ package assignment3;
 
 import java.io.BufferedInputStream;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -107,7 +108,7 @@ public class TFTPServer {
 	 */
 	private InetSocketAddress receiveFrom(DatagramSocket socket, byte[] buf) {
 		// Create datagram packet
-		DatagramPacket packet = new DatagramSocket(buf, buf.length);
+		DatagramPacket packet = new DatagramPacket(buf, buf.length);
 		
 		// Receive packet
 		socket.receive(packet);
@@ -170,6 +171,7 @@ public class TFTPServer {
 		BufferedInputStream bis = new BufferedInputStream(fis);
 		byte[] buffer = new byte[BUFSIZE];
 		int bytesRead;
+		int maxRetries = 4; // counter for blocks sending
 
 
 		while((bytesRead = bis.read(buffer)) != -1) {
@@ -177,15 +179,23 @@ public class TFTPServer {
 			send_DATA(clientSocket, buffer, bytesRead, bytesRead);
 
 			// Receive Acknowledgment.
-			receive_ACK(clientSocket);
+			if (receive_ACK(clientSocket)) {
+
+			} else {
+				try {
+					if (!receive_ACK(clientSocket)) {
+
+					}
+				} catch (IOException e) {
+					// TODO: Error handling.
+					e.printStackTrace();
+				}
+			}
 		}
-
-
 		return true;
 	}
 
 	private void send_DATA(DatagramSocket socket, byte[] data, int length, int blockNum) {
-		// TODO: Error handling.
 		try {
 			// Bytebuffer array
 			ByteBuffer bufferArray = ByteBuffer.allocate(4 + length); // length will ensure bytebuffer has enough space to accomodate.
@@ -197,23 +207,21 @@ public class TFTPServer {
 			DatagramPacket packet = new DatagramPacket(bufferArray.array(), bufferArray.position(), socket.getRemoteSocketAddress());
 			socket.send(packet);
 		} catch (IOException e) {
-
+			// TODO: Error handling.
 		}
 	}
 
 	private void receive_ACK(DatagramPacket socket) {
-		// TODO: Error handlings, Handling timeout or retransmission.
 		byte[] buf = new byte[4];
 		DatagramPacket receivedAcknowledgment = new DatagramPacket(buf, buf.length);
 
 		try {
 			socket.receive(receivedAcknowledgment);
-
 		} catch (IOException e) {
-
+			// TODO: Error handling.
+			e.printStackTrace();
 		}
 		ByteBuffer bufferArray = ByteBuffer.wrap(receivedAcknowledgment.getData());
-
 	}
 	
 	private boolean receive_DATA_send_ACK() {
