@@ -146,18 +146,20 @@ public class TFTPServer {
 	 * @param requestedFile (name of file to read/write)
 	 * @param opcode (RRQ or WRQ)
 	 */
-	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) {		
+	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) {
+		String fileName;
+		
 		if(opcode == OP_RRQ) {
 			// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
-			boolean result = send_DATA_receive_ACK(params);
+			boolean result = send_DATA_receive_ACK(sendSocket, fileName);
 		}
 		else if (opcode == OP_WRQ) {
-			boolean result = receive_DATA_send_ACK(params);
+			boolean result = receive_DATA_send_ACK(sendSocket, fileName);
 		}
 		else {
 			System.err.println("Invalid request. Sending an error packet.");
 			// See "TFTP Formats" in TFTP specification for the ERROR packet contents
-			send_ERR(params);
+			send_ERR();
 			return;
 		}		
 	}
@@ -166,31 +168,43 @@ public class TFTPServer {
 	To be implemented
 	*/
 	private boolean send_DATA_receive_ACK(DatagramSocket clientSocket, String requestedFile) {
+		try (FileInputStream fis = new FileInputStream(requestedFile);
+			 BufferedInputStream bis = new BufferedInputStream(fis)) {
 
-		FileInputStream fis = new FileInputStream(requestedFile);
-		BufferedInputStream bis = new BufferedInputStream(fis);
-		byte[] buffer = new byte[BUFSIZE];
-		int bytesRead;
-		int maxRetries = 4; // counter for blocks sending
+			byte[] buffer = new byte[BUFSIZE];
+			int bytesRead;
+			int maxRetries = 4; // counter for blocks sending
 
+			while((bytesRead = bis.read(buffer)) != -1) {
+				// Send file.
+				send_DATA(clientSocket, buffer, bytesRead, bytesRead);
 
-		while((bytesRead = bis.read(buffer)) != -1) {
-			// Send file.
-			send_DATA(clientSocket, buffer, bytesRead, bytesRead);
+				// Receive Acknowledgment.
+				if (receive_ACK(clientSocket)) {
 
-			// Receive Acknowledgment.
-			if (receive_ACK(clientSocket)) {
-
-			} else {
-				try {
+				} else {
+					// If we do not receive acknowledgment from client.
 					if (!receive_ACK(clientSocket)) {
+						int retryCount = 0;
+						while (retryCount < maxRetries) {
+							send_DATA(clientSocket, buffer, bytesRead, bytesRead);
+								
+							if (receive_ACK(clientSocket)) {
 
+								break;
+							}
+							retryCount++;
+
+							if (retryCount >= maxRetries) {
+								System.err.println("Client does not receive or we do not receive.");
+								break;
+							}
+						}
 					}
-				} catch (IOException e) {
-					// TODO: Error handling.
-					e.printStackTrace();
 				}
 			}
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 		return true;
 	}
@@ -208,20 +222,21 @@ public class TFTPServer {
 			socket.send(packet);
 		} catch (IOException e) {
 			// TODO: Error handling.
+			e.printStackTrace();
 		}
 	}
 
 	private void receive_ACK(DatagramPacket socket) {
 		byte[] buf = new byte[4];
-		DatagramPacket receivedAcknowledgment = new DatagramPacket(buf, buf.length);
+		DatagramPacket receivedAck = new DatagramPacket(buf, buf.length);
 
 		try {
-			socket.receive(receivedAcknowledgment);
+			socket.receive(receivedAck);
 		} catch (IOException e) {
 			// TODO: Error handling.
 			e.printStackTrace();
 		}
-		ByteBuffer bufferArray = ByteBuffer.wrap(receivedAcknowledgment.getData());
+		ByteBuffer bufferArray = ByteBuffer.wrap(receivedAck.getData());
 	}
 	
 	private boolean receive_DATA_send_ACK() {
@@ -241,6 +256,7 @@ public class TFTPServer {
 
 		} catch (IOException e){
 			// TODO: send_ERR
+			e.printStackTrace();
 		}
 
 		return true;
