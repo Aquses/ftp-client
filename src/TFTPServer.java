@@ -15,8 +15,8 @@ import java.nio.ByteBuffer;
 public class TFTPServer {
 	public static final int TFTPPORT = 4970;
 	public static final int BUFSIZE = 516;
-	public static final String READDIR = "/home/username/read/"; //custom address at your PC
-	public static final String WRITEDIR = "/home/username/write/"; //custom address at your PC
+	public static final String READDIR = "/read/"; //custom address at your PC
+	public static final String WRITEDIR = "/write/"; //custom address at your PC
 	// OP codes
 	// 1     Read request (RRQ)
 	// 2     Write request (WRQ)
@@ -45,58 +45,62 @@ public class TFTPServer {
 	}
 	
 	private void start() throws SocketException {
-		byte[] buf= new byte[BUFSIZE];
-		
-		// Create socket
-		DatagramSocket socket= new DatagramSocket(null);
-		
-		// Create local bind point 
-		SocketAddress localBindPoint= new InetSocketAddress(TFTPPORT);
-		socket.bind(localBindPoint);
-
-		System.out.printf("Listening at port %d for new requests\n", TFTPPORT);
-
-		// Loop to handle client requests 
-		while (true) {        
+		try {
+			byte[] buf= new byte[BUFSIZE];
 			
-			final InetSocketAddress clientAddress = receiveFrom(socket, buf);
+			// Create socket
+			DatagramSocket socket= new DatagramSocket(null);
 			
-			// If clientAddress is null, an error occurred in receiveFrom()
-			if (clientAddress == null) 
-				continue;
+			// Create local bind point 
+			SocketAddress localBindPoint= new InetSocketAddress(TFTPPORT);
+			socket.bind(localBindPoint);
 
-			final StringBuffer requestedFile= new StringBuffer();
-			final int reqtype = ParseRQ(buf, requestedFile);
+			System.out.printf("Listening at port %d for new requests\n", TFTPPORT);
 
-			new Thread() {
-				public void run() {
-					try {
-						DatagramSocket sendSocket= new DatagramSocket(0);
+			// Loop to handle client requests 
+			while (true) {        
+				
+				final InetSocketAddress clientAddress = receiveFrom(socket, buf);
+				
+				// If clientAddress is null, an error occurred in receiveFrom()
+				if (clientAddress == null) 
+					continue;
 
-						// Connect to client
-						sendSocket.connect(clientAddress);						
-						
-						System.out.printf("%s request for %s from %s using port %d\n",
-								(reqtype == OP_RRQ)?"Read":"Write",
-								clientAddress.getHostName(), clientAddress.getPort());  
-								
-						// Read request
-						if (reqtype == OP_RRQ) {      
-							requestedFile.insert(0, READDIR);
-							HandleRQ(sendSocket, requestedFile.toString(), OP_RRQ);
+				final StringBuffer requestedFile= new StringBuffer();
+				final int reqtype = ParseRQ(buf, requestedFile);
+
+				new Thread() {
+					public void run() {
+						try {
+							DatagramSocket sendSocket= new DatagramSocket(0);
+
+							// Connect to client
+							sendSocket.connect(clientAddress);						
+							
+							System.out.printf("%s request for %s from %s using port %d\n",
+									(reqtype == OP_RRQ)?"Read":"Write",
+									clientAddress.getHostName(), clientAddress.getPort());  
+									
+							// Read request
+							if (reqtype == OP_RRQ) {      
+								requestedFile.insert(0, READDIR);
+								HandleRQ(sendSocket, requestedFile.toString(), OP_RRQ);
+							}
+							// Write request
+							else {                       
+								requestedFile.insert(0, WRITEDIR);
+								HandleRQ(sendSocket,requestedFile.toString(),OP_WRQ);  
+							}
+							sendSocket.close();
+						} 
+						catch (SocketException e) {
+							e.printStackTrace();
 						}
-						// Write request
-						else {                       
-							requestedFile.insert(0, WRITEDIR);
-							HandleRQ(sendSocket,requestedFile.toString(),OP_WRQ);  
-						}
-						sendSocket.close();
-					} 
-					catch (SocketException e) {
-						e.printStackTrace();
 					}
-				}
-			}.start();
+				}.start();
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 	}
 	
@@ -106,13 +110,17 @@ public class TFTPServer {
 	 * @param buf (where to store the read data)
 	 * @return socketAddress (the socket address of the client)
 	 */
-	private InetSocketAddress receiveFrom(DatagramSocket socket, byte[] buf) {
+	private InetSocketAddress receiveFrom(DatagramSocket socket, byte[] buf) throws IOException {
 		// Create datagram packet
 		DatagramPacket packet = new DatagramPacket(buf, buf.length);
 		
 		// Receive packet
-		socket.receive(packet);
-		
+		try {
+			socket.receive(packet);
+		} catch (IOException e) {
+			e.printStackTrace();
+			return null;
+		}
 		// Get client address and port from the packet
 		InetSocketAddress socketAddress = new InetSocketAddress(packet.getAddress(), packet.getPort());
 
@@ -147,14 +155,13 @@ public class TFTPServer {
 	 * @param opcode (RRQ or WRQ)
 	 */
 	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) {
-		String fileName;
 		
 		if(opcode == OP_RRQ) {
 			// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
-			boolean result = send_DATA_receive_ACK(sendSocket, fileName);
+			boolean result = send_DATA_receive_ACK(sendSocket, requestedFile);
 		}
 		else if (opcode == OP_WRQ) {
-			boolean result = receive_DATA_send_ACK(sendSocket, fileName);
+			boolean result = receive_DATA_send_ACK(sendSocket, requestedFile);
 		}
 		else {
 			System.err.println("Invalid request. Sending an error packet.");
@@ -173,29 +180,31 @@ public class TFTPServer {
 
 			byte[] buffer = new byte[BUFSIZE];
 			int bytesRead;
-			int maxRetries = 4; // counter for blocks sending
+			final int MAX_RETRIES = 4; // counter for blocks sending
+			int blockNum = 1;
 
 			while((bytesRead = bis.read(buffer)) != -1) {
 				// Send file.
-				send_DATA(clientSocket, buffer, bytesRead, bytesRead);
+				// (DatagramSocket socket, byte[] data, int length, int blockNum)
+				send_DATA(clientSocket, buffer, bytesRead, blockNum);
 
 				// Receive Acknowledgment.
 				if (receive_ACK(clientSocket)) {
-
+					blockNum++;
 				} else {
 					// If we do not receive acknowledgment from client.
 					if (!receive_ACK(clientSocket)) {
 						int retryCount = 0;
-						while (retryCount < maxRetries) {
-							send_DATA(clientSocket, buffer, bytesRead, bytesRead);
+						while (retryCount < MAX_RETRIES) {
+							send_DATA(clientSocket, buffer, bytesRead, blockNum);
 								
 							if (receive_ACK(clientSocket)) {
-
+								blockNum++;
 								break;
 							}
 							retryCount++;
 
-							if (retryCount >= maxRetries) {
+							if (retryCount >= MAX_RETRIES) {
 								System.err.println("Client does not receive or we do not receive.");
 								break;
 							}
@@ -240,8 +249,6 @@ public class TFTPServer {
 	}
 	
 	private boolean receive_DATA_send_ACK() {
-		final int BUFSIZE = 516;
-
 		try {
 			// Received packets.
 			byte[] buf = new byte[BUFSIZE];
