@@ -10,6 +10,7 @@ import java.net.PortUnreachableException;
 import java.net.SocketAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 public class TFTPServer {
@@ -156,20 +157,19 @@ public class TFTPServer {
 		// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
 		if (opcode == OP_RRQ) {
 			if (!(file.exists() && file.isFile())) {
-				System.err.println("The file was not found.");
+				send_ERR(sendSocket, 1, "File not found.");
 			}
 			send_DATA_receive_ACK(sendSocket, fileName);
 		}
 		else if (opcode == OP_WRQ) {
 			if (file.exists() && file.isFile()) {
-				System.err.println("The file exists already.");
+				send_ERR(sendSocket, 6, "File already exists.");
 			}
 			receive_DATA_send_ACK(sendSocket, fileName);
 		}
 		else {
 			// See "TFTP Formats" in TFTP specification for the ERROR packet contents
-			System.err.println("Invalid request. Sending an error packet.");
-			send_ERR();
+			send_ERR(sendSocket, 4, "Illegal TFTP operation.");
 			return;
 		}		
 	}
@@ -177,7 +177,7 @@ public class TFTPServer {
 	private boolean send_DATA_receive_ACK(DatagramSocket clientSocket, String requestedFile) {
 		try {
 			final int MAX_RETRIES = 5; // counter for blocks sending
-			int readBytes = 512;
+			int readBytes;
 			short blockNum = 1;						
 			byte[] buffer = new byte[BUFSIZE];
 			boolean doneErr = false;
@@ -196,7 +196,7 @@ public class TFTPServer {
 			} while ((readBytes != -1) && !doneErr);
 			fis.close();
 		} catch (IOException e) {
-			e.printStackTrace();
+			send_ERR(clientSocket, 0, "Error in file reading or socket communication.");
 		}
 		return true;
 	}
@@ -222,7 +222,7 @@ public class TFTPServer {
 					retryCount++;
 	
 					if (retryCount >= maxRetries) {
-						System.err.println("Server does not receive or we do not receive.");
+						send_ERR(clientSocket, 0, "Server does not receive or we do not receive.");
 						doneErr = true;
 						break;
 					}
@@ -242,8 +242,7 @@ public class TFTPServer {
 			DatagramPacket packet = new DatagramPacket(bufferArray.array(), bufferArray.position(), socket.getRemoteSocketAddress());
 			socket.send(packet);
 		} catch (IOException e) {
-			// TODO: Error handling.
-			e.printStackTrace();
+			send_ERR(socket, 0, "Could not send the packet.");
 		}
 	}
 	
@@ -256,11 +255,10 @@ public class TFTPServer {
 		try {
 			socket.receive(receivedAck);
 		} catch (PortUnreachableException e) {
-			System.err.println("Port Unreachable: " + e.getMessage());
+			send_ERR(socket, 0, "Port Unreachable.");
 			return false;
 		} catch (IOException e) {
-			System.err.println("Error while receiving acknowledgment.");
-			e.printStackTrace();
+			send_ERR(socket, 0, "Error while receiving acknowledgment.");
 			return false;
 		}
 
@@ -273,13 +271,14 @@ public class TFTPServer {
 				if (receivedBlock == expectedBlock) {
 					return true;
 				} else {
-					System.err.println("Received ACK with incorrect block number.");
+					send_ERR(socket, 0, "Received ACK with incorrect block number.");
 					return false;
 				}		
 			case OP_ERR:
+				send_ERR(socket, 0, "The ACK was not received.");
 				return false;
 			default:
-				System.err.println("Incorrect opcode received.");
+				send_ERR(socket, 0, "Incorrect opcode received.");
 				return false;
 		}
 	}
@@ -307,7 +306,7 @@ public class TFTPServer {
 		return true;
 	}
 	
-	private void send_ERR() {
+	private void send_ERR(DatagramSocket socket, int errorCode, String errorMessage) {
 		// 0  Not defined, see error message (if any).
 		// 1  File not found.
 		// 2  Access violation.
@@ -316,8 +315,15 @@ public class TFTPServer {
 		// 5  Unknown transfer ID.
 		// 6  File already exists.
 		// 7  No such user.
+		try {
+			String fullErrorMessage = errorCode + " " + errorMessage;
+			byte[] errorData = fullErrorMessage.getBytes(StandardCharsets.US_ASCII);
+			DatagramPacket errorPacket = new DatagramPacket(errorData, errorData.length);
+			errorPacket.setPort(TFTPPORT);
 
-
-
+			socket.send(errorPacket);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 }
