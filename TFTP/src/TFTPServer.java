@@ -1,5 +1,6 @@
 package src;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -13,7 +14,7 @@ import java.util.Arrays;
 
 public class TFTPServer {
 	public static final int TFTPPORT = 4970;
-	public static final int BUFSIZE = 516;
+	public static final int BUFSIZE = 516; // 512
 	public static final String READDIR = "C://Users//Eco-E//Desktop//assignment3//read//"; //custom address at your PC
 	public static final String WRITEDIR = "/write/"; //custom address at your PC
 	// OP codes
@@ -148,19 +149,26 @@ public class TFTPServer {
 	 * @param opcode (RRQ or WRQ)
 	 */
 	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) {
+		File file = new File(requestedFile);
 		String[] request = requestedFile.split("\0");
 		String fileName = request[0];
 		
-		if(opcode == OP_RRQ) {
-			// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
+		// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
+		if (opcode == OP_RRQ) {
+			if (!(file.exists() && file.isFile())) {
+				System.err.println("The file was not found.");
+			}
 			send_DATA_receive_ACK(sendSocket, fileName);
 		}
 		else if (opcode == OP_WRQ) {
+			if (file.exists() && file.isFile()) {
+				System.err.println("The file exists already.");
+			}
 			receive_DATA_send_ACK(sendSocket, fileName);
 		}
 		else {
-			System.err.println("Invalid request. Sending an error packet.");
 			// See "TFTP Formats" in TFTP specification for the ERROR packet contents
+			System.err.println("Invalid request. Sending an error packet.");
 			send_ERR();
 			return;
 		}		
@@ -169,28 +177,31 @@ public class TFTPServer {
 	private boolean send_DATA_receive_ACK(DatagramSocket clientSocket, String requestedFile) {
 		try {
 			final int MAX_RETRIES = 5; // counter for blocks sending
-			int readByte = 512;
+			int readBytes = 512;
 			short blockNum = 1;						
 			byte[] buffer = new byte[BUFSIZE];
-			boolean finishedOnError = false;
+			boolean doneErr = false;
 			FileInputStream fis = new FileInputStream(requestedFile);
-	
-			while (!(readByte < 512) && !finishedOnError) {
+			
+			do {
+				readBytes = fis.read(buffer);
 				int i = buffer.length - 1;
 				while (i >= 0 && buffer[i] == 0) {
 					--i;
 				}
 				buffer = Arrays.copyOf(buffer, i + 1);
 
-				sendAndReceive(clientSocket, buffer, blockNum, MAX_RETRIES, finishedOnError);
-			}
+				sendAndReceive(clientSocket, buffer, blockNum, MAX_RETRIES, doneErr);
+				blockNum++;
+			} while ((readBytes != -1) && !doneErr);
+			fis.close();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 		return true;
 	}
 	
-	private void sendAndReceive(DatagramSocket clientSocket, byte[] buffer, short blockNum, int maxRetries, boolean finishedOnError) {
+	private void sendAndReceive(DatagramSocket clientSocket, byte[] buffer, short blockNum, int maxRetries, boolean doneErr) {
 		// Send data to the client
 		sendDataPacket(clientSocket, buffer, blockNum);
 	
@@ -212,7 +223,7 @@ public class TFTPServer {
 	
 					if (retryCount >= maxRetries) {
 						System.err.println("Server does not receive or we do not receive.");
-						finishedOnError = true;
+						doneErr = true;
 						break;
 					}
 				}
@@ -297,7 +308,16 @@ public class TFTPServer {
 	}
 	
 	private void send_ERR() {
+		// 0  Not defined, see error message (if any).
+		// 1  File not found.
+		// 2  Access violation.
+		// 3  Disk full or allocation exceeded.
+		// 4  Illegal TFTP operation.
+		// 5  Unknown transfer ID.
+		// 6  File already exists.
+		// 7  No such user.
+
+
 
 	}
-	
 }
