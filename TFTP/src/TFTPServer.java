@@ -1,21 +1,20 @@
-package assignment3;
+package src;
 
-import java.io.BufferedInputStream;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.PortUnreachableException;
 import java.net.SocketAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 public class TFTPServer {
 	public static final int TFTPPORT = 4970;
 	public static final int BUFSIZE = 516;
-	public static final String READDIR = "/read/"; //custom address at your PC
+	public static final String READDIR = "C://Users//Eco-E//Desktop//assignment3//read//"; //custom address at your PC
 	public static final String WRITEDIR = "/write/"; //custom address at your PC
 	// OP codes
 	// 1     Read request (RRQ)
@@ -77,10 +76,10 @@ public class TFTPServer {
 							// Connect to client
 							sendSocket.connect(clientAddress);						
 							
-							System.out.printf("%s request for %s from %s using port %d\n",
+							System.out.printf("%s request from %s using port %d\n",
 									(reqtype == OP_RRQ)?"Read":"Write",
-									clientAddress.getHostName(), clientAddress.getPort());  
-									
+									clientAddress.getHostName(), clientAddress.getPort());
+					 
 							// Read request
 							if (reqtype == OP_RRQ) {      
 								requestedFile.insert(0, READDIR);
@@ -113,14 +112,8 @@ public class TFTPServer {
 	private InetSocketAddress receiveFrom(DatagramSocket socket, byte[] buf) throws IOException {
 		// Create datagram packet
 		DatagramPacket packet = new DatagramPacket(buf, buf.length);
-		
 		// Receive packet
-		try {
-			socket.receive(packet);
-		} catch (IOException e) {
-			e.printStackTrace();
-			return null;
-		}
+		socket.receive(packet);
 		// Get client address and port from the packet
 		InetSocketAddress socketAddress = new InetSocketAddress(packet.getAddress(), packet.getPort());
 
@@ -136,7 +129,6 @@ public class TFTPServer {
 	 */
 	private int ParseRQ(byte[] buf, StringBuffer requestedFile) {
 		// See "TFTP Formats" in TFTP specification for the RRQ/WRQ request contents
-
 		ByteBuffer wrap = ByteBuffer.wrap(buf);
 		short opcode = wrap.getShort();
 
@@ -147,6 +139,7 @@ public class TFTPServer {
 		return opcode;
 	}
 
+
 	/**
 	 * Handles RRQ and WRQ requests 
 	 * 
@@ -155,13 +148,15 @@ public class TFTPServer {
 	 * @param opcode (RRQ or WRQ)
 	 */
 	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) {
+		String[] request = requestedFile.split("\0");
+		String fileName = request[0];
 		
 		if(opcode == OP_RRQ) {
 			// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
-			boolean result = send_DATA_receive_ACK(sendSocket, requestedFile);
+			send_DATA_receive_ACK(sendSocket, fileName);
 		}
 		else if (opcode == OP_WRQ) {
-			boolean result = receive_DATA_send_ACK(sendSocket, requestedFile);
+			receive_DATA_send_ACK(sendSocket, fileName);
 		}
 		else {
 			System.err.println("Invalid request. Sending an error packet.");
@@ -171,62 +166,68 @@ public class TFTPServer {
 		}		
 	}
 	
-	/**
-	To be implemented
-	*/
 	private boolean send_DATA_receive_ACK(DatagramSocket clientSocket, String requestedFile) {
-		try (FileInputStream fis = new FileInputStream(requestedFile);
-			 BufferedInputStream bis = new BufferedInputStream(fis)) {
-
+		try {
+			final int MAX_RETRIES = 5; // counter for blocks sending
+			int readByte = 512;
+			short blockNum = 1;						
 			byte[] buffer = new byte[BUFSIZE];
-			int bytesRead;
-			final int MAX_RETRIES = 4; // counter for blocks sending
-			int blockNum = 1;
-
-			while((bytesRead = bis.read(buffer)) != -1) {
-				// Send file.
-				// (DatagramSocket socket, byte[] data, int length, int blockNum)
-				send_DATA(clientSocket, buffer, bytesRead, blockNum);
-
-				// Receive Acknowledgment.
-				if (receive_ACK(clientSocket)) {
-					blockNum++;
-				} else {
-					// If we do not receive acknowledgment from client.
-					if (!receive_ACK(clientSocket)) {
-						int retryCount = 0;
-						while (retryCount < MAX_RETRIES) {
-							send_DATA(clientSocket, buffer, bytesRead, blockNum);
-								
-							if (receive_ACK(clientSocket)) {
-								blockNum++;
-								break;
-							}
-							retryCount++;
-
-							if (retryCount >= MAX_RETRIES) {
-								System.err.println("Client does not receive or we do not receive.");
-								break;
-							}
-						}
-					}
+			boolean finishedOnError = false;
+			FileInputStream fis = new FileInputStream(requestedFile);
+	
+			while (!(readByte < 512) && !finishedOnError) {
+				int i = buffer.length - 1;
+				while (i >= 0 && buffer[i] == 0) {
+					--i;
 				}
+				buffer = Arrays.copyOf(buffer, i + 1);
+
+				sendAndReceive(clientSocket, buffer, blockNum, MAX_RETRIES, finishedOnError);
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 		return true;
 	}
-
-	private void send_DATA(DatagramSocket socket, byte[] data, int length, int blockNum) {
+	
+	private void sendAndReceive(DatagramSocket clientSocket, byte[] buffer, short blockNum, int maxRetries, boolean finishedOnError) {
+		// Send data to the client
+		sendDataPacket(clientSocket, buffer, blockNum);
+	
+		// Receive Acknowledgment.
+		if (receiveAck(clientSocket, blockNum)) {
+			blockNum++;
+		} else {
+			// If we do not receive acknowledgment from client.
+			if (!receiveAck(clientSocket, blockNum)) {
+				int retryCount = 0;
+				while (retryCount < maxRetries) {
+					sendDataPacket(clientSocket, buffer, blockNum);
+	
+					if (receiveAck(clientSocket, blockNum)) {
+						blockNum++;
+						break;
+					}
+					retryCount++;
+	
+					if (retryCount >= maxRetries) {
+						System.err.println("Server does not receive or we do not receive.");
+						finishedOnError = true;
+						break;
+					}
+				}
+			}
+		}
+	}
+	
+	// reference: https://www.geeksforgeeks.org/bytebuffer-put-methods-in-java-with-examples-set-1/
+	private void sendDataPacket(DatagramSocket socket, byte[] data, short blockNum) {
 		try {
-			// Bytebuffer array
-			ByteBuffer bufferArray = ByteBuffer.allocate(4 + length); // length will ensure bytebuffer has enough space to accomodate.
-			bufferArray.putShort((short) OP_DAT); // putShort takes 16-bit integers.
-			// blockNum is crucial to send.
-			bufferArray.putShort(blockNum);
-			bufferArray.put(data);
-
+			ByteBuffer bufferArray = ByteBuffer.allocate(4 + data.length);
+			bufferArray.putShort((short) OP_DAT); // adds operation code into the packet
+			bufferArray.putShort(blockNum); // adds the block number into the packet
+			bufferArray.put(data); // copies and transfers data into the packet
+	
 			DatagramPacket packet = new DatagramPacket(bufferArray.array(), bufferArray.position(), socket.getRemoteSocketAddress());
 			socket.send(packet);
 		} catch (IOException e) {
@@ -234,21 +235,47 @@ public class TFTPServer {
 			e.printStackTrace();
 		}
 	}
+	
 
-	private void receive_ACK(DatagramPacket socket) {
-		byte[] buf = new byte[4];
-		DatagramPacket receivedAck = new DatagramPacket(buf, buf.length);
+	private boolean receiveAck(DatagramSocket socket, short expectedBlock) {
+		byte[] buffer = new byte[4];
+		DatagramPacket receivedAck = new DatagramPacket(buffer, buffer.length);
+		ByteBuffer bufferArray = ByteBuffer.wrap(buffer);
 
 		try {
 			socket.receive(receivedAck);
+		} catch (PortUnreachableException e) {
+			System.err.println("Port Unreachable: " + e.getMessage());
+			return false;
 		} catch (IOException e) {
-			// TODO: Error handling.
+			System.err.println("Error while receiving acknowledgment.");
 			e.printStackTrace();
+			return false;
 		}
-		ByteBuffer bufferArray = ByteBuffer.wrap(receivedAck.getData());
+
+		short opcode = bufferArray.getShort();
+		// 4     Acknowledgment (ACK)
+		// 5     Error (ERROR)
+		switch (opcode) {
+			case OP_ACK:
+				short receivedBlock = bufferArray.getShort();
+				if (receivedBlock == expectedBlock) {
+					return true;
+				} else {
+					System.err.println("Received ACK with incorrect block number.");
+					return false;
+				}		
+			case OP_ERR:
+				return false;
+			default:
+				System.err.println("Incorrect opcode received.");
+				return false;
+		}
 	}
+
+
 	
-	private boolean receive_DATA_send_ACK() {
+	private boolean receive_DATA_send_ACK(DatagramSocket socket, String requestedFile) {
 		try {
 			// Received packets.
 			byte[] buf = new byte[BUFSIZE];
