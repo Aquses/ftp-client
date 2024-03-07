@@ -2,6 +2,7 @@ package src;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -242,7 +243,7 @@ public class TFTPServer {
 			DatagramPacket packet = new DatagramPacket(bufferArray.array(), bufferArray.position(), socket.getRemoteSocketAddress());
 			socket.send(packet);
 		} catch (IOException e) {
-			send_ERR(socket, (short) 0, "Could not send the packet.");
+			send_ERR(socket, (short) 0, "Could not send the DAT packet.");
 		}
 	}
 	
@@ -285,6 +286,7 @@ public class TFTPServer {
 
 	private boolean receive_DATA_send_ACK(DatagramSocket socket, String requestedFile) {
 		try {
+			FileOutputStream fos = new FileOutputStream(requestedFile);
 			// Received packets.
 			byte[] buf = new byte[BUFSIZE];
 			DatagramPacket receivedPacket = new DatagramPacket(buf, buf.length);
@@ -302,6 +304,19 @@ public class TFTPServer {
 		}
 
 		return true;
+	}
+
+	private void sendAckPacket(DatagramSocket socket, short expectedBlock) {
+		try {
+			ByteBuffer bufferArray = ByteBuffer.allocate(4);
+			bufferArray.putShort((short) OP_ACK); // adds operation code into the packet
+			bufferArray.putShort(expectedBlock); // adds the block number into the packet
+	
+			DatagramPacket packet = new DatagramPacket(bufferArray.array(), bufferArray.position(), socket.getRemoteSocketAddress());
+			socket.send(packet);
+		} catch (IOException e) {
+			send_ERR(socket, (short) 0, "Could not send the ACK packet.");
+		}
 	}
 	
 	private void send_ERR(DatagramSocket socket, short errorCode, String errorMessage) {
