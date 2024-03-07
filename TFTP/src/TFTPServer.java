@@ -10,7 +10,6 @@ import java.net.PortUnreachableException;
 import java.net.SocketAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 public class TFTPServer {
@@ -150,26 +149,26 @@ public class TFTPServer {
 	 * @param opcode (RRQ or WRQ)
 	 */
 	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) {
-		File file = new File(requestedFile);
 		String[] request = requestedFile.split("\0");
 		String fileName = request[0];
+		File file = new File(fileName);
 		
 		// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
 		if (opcode == OP_RRQ) {
 			if (!(file.exists() && file.isFile())) {
-				send_ERR(sendSocket, 1, "File not found.");
+				send_ERR(sendSocket, (short) 1, "File not found.");
 			}
 			send_DATA_receive_ACK(sendSocket, fileName);
 		}
 		else if (opcode == OP_WRQ) {
 			if (file.exists() && file.isFile()) {
-				send_ERR(sendSocket, 6, "File already exists.");
+				send_ERR(sendSocket, (short) 6, "File already exists.");
 			}
 			receive_DATA_send_ACK(sendSocket, fileName);
 		}
 		else {
 			// See "TFTP Formats" in TFTP specification for the ERROR packet contents
-			send_ERR(sendSocket, 4, "Illegal TFTP operation.");
+			send_ERR(sendSocket, (short) 4, "Illegal TFTP operation.");
 			return;
 		}		
 	}
@@ -196,7 +195,8 @@ public class TFTPServer {
 			} while ((readBytes != -1) && !doneErr);
 			fis.close();
 		} catch (IOException e) {
-			send_ERR(clientSocket, 0, "Error in file reading or socket communication.");
+			e.printStackTrace();
+			send_ERR(clientSocket, (short) 0, "Error in file reading or socket communication.");
 		}
 		return true;
 	}
@@ -222,7 +222,7 @@ public class TFTPServer {
 					retryCount++;
 	
 					if (retryCount >= maxRetries) {
-						send_ERR(clientSocket, 0, "Server does not receive or we do not receive.");
+						send_ERR(clientSocket, (short)0, "Server does not receive or we do not receive.");
 						doneErr = true;
 						break;
 					}
@@ -242,7 +242,7 @@ public class TFTPServer {
 			DatagramPacket packet = new DatagramPacket(bufferArray.array(), bufferArray.position(), socket.getRemoteSocketAddress());
 			socket.send(packet);
 		} catch (IOException e) {
-			send_ERR(socket, 0, "Could not send the packet.");
+			send_ERR(socket, (short) 0, "Could not send the packet.");
 		}
 	}
 	
@@ -255,10 +255,10 @@ public class TFTPServer {
 		try {
 			socket.receive(receivedAck);
 		} catch (PortUnreachableException e) {
-			send_ERR(socket, 0, "Port Unreachable.");
+			send_ERR(socket, (short) 0, "Port Unreachable.");
 			return false;
 		} catch (IOException e) {
-			send_ERR(socket, 0, "Error while receiving acknowledgment.");
+			send_ERR(socket, (short) 0, "Error while receiving acknowledgment.");
 			return false;
 		}
 
@@ -271,20 +271,18 @@ public class TFTPServer {
 				if (receivedBlock == expectedBlock) {
 					return true;
 				} else {
-					send_ERR(socket, 0, "Received ACK with incorrect block number.");
+					send_ERR(socket, (short) 0, "Received ACK with incorrect block number.");
 					return false;
 				}		
 			case OP_ERR:
-				send_ERR(socket, 0, "The ACK was not received.");
+				send_ERR(socket, (short) 0, "The ACK was not received.");
 				return false;
 			default:
-				send_ERR(socket, 0, "Incorrect opcode received.");
+				send_ERR(socket, (short) 0, "Incorrect opcode received.");
 				return false;
 		}
 	}
 
-
-	
 	private boolean receive_DATA_send_ACK(DatagramSocket socket, String requestedFile) {
 		try {
 			// Received packets.
@@ -306,7 +304,7 @@ public class TFTPServer {
 		return true;
 	}
 	
-	private void send_ERR(DatagramSocket socket, int errorCode, String errorMessage) {
+	private void send_ERR(DatagramSocket socket, short errorCode, String errorMessage) {
 		// 0  Not defined, see error message (if any).
 		// 1  File not found.
 		// 2  Access violation.
@@ -315,15 +313,19 @@ public class TFTPServer {
 		// 5  Unknown transfer ID.
 		// 6  File already exists.
 		// 7  No such user.
+		int bufferSize = 5 + errorMessage.getBytes().length;
+		ByteBuffer bufferArr = ByteBuffer.allocate(bufferSize);
+		bufferArr.putShort((short) OP_ERR);
+		bufferArr.putShort(errorCode);
+		bufferArr.put(errorMessage.getBytes());
+		bufferArr.put((byte) 0);
+	
+		// Send error message
+		DatagramPacket errorPacket = new DatagramPacket(bufferArr.array(), bufferArr.array().length);
 		try {
-			String fullErrorMessage = errorCode + " " + errorMessage;
-			byte[] errorData = fullErrorMessage.getBytes(StandardCharsets.US_ASCII);
-			DatagramPacket errorPacket = new DatagramPacket(errorData, errorData.length);
-			errorPacket.setPort(TFTPPORT);
-
 			socket.send(errorPacket);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-	}
+	}	
 }

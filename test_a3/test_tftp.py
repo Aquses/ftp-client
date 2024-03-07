@@ -7,11 +7,11 @@ PORT = 4970
 @pytest.fixture(scope="module")
 def getClient():
     import tftpclient
-    return tftpclient.TFTPClient((HOST, PORT), '/home/ubuntu/tftpdir/read/')
+    return tftpclient.TFTPClient((HOST, PORT), 'C://Users//Eco-E//Desktop//assignment3//read//')
     
 def putClient():
     import tftpclient
-    return tftpclient.TFTPClient((HOST, PORT), '/home/ubuntu/tftpdir/write/')
+    return tftpclient.TFTPClient((HOST, PORT), 'C://Users//Eco-E//Desktop//assignment3//read//')
 
 
 # Get existing 50 byte file
