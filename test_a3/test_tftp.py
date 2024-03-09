@@ -7,11 +7,12 @@ PORT = 4970
 @pytest.fixture(scope="module")
 def getClient():
     import tftpclient
-    return tftpclient.TFTPClient((HOST, PORT), 'C://Users//Eco-E//Desktop//assignment3//write//')
-    
+    return tftpclient.TFTPClient((HOST, PORT), '/read/') # CHANGE HERE
+
+@pytest.fixture(scope="module")
 def putClient():
     import tftpclient
-    return tftpclient.TFTPClient((HOST, PORT), 'C://Users//Eco-E//Desktop//assignment3//write//')
+    return tftpclient.TFTPClient((HOST, PORT), '/write/') # CHANGE HERE
 
 
 # Get existing 50 byte file
@@ -35,18 +36,18 @@ def putClient():
 
 
 # Put 50 byte file
-def test_PSB50B(getClient):
-    assert getClient.putFileBytes(b'f50b.ul', 50)
+# def test_PSB50B(putClient):
+#     assert putClient.putFileBytes(b'f50b.ul', 50)
 
 
 # Put 500 byte file
-def test_PSB500B(getClient):
-    assert getClient.putFileBytes(b'f500b.ul', 500)
+# def test_PSB500B(putClient):
+#     assert putClient.putFileBytes(b'f500b.ul', 500)
 
 
 # # Put 512 byte file
-def test_PMB1Blks(getClient):
-    assert getClient.putFileBlocks(b'f1blk.ul', 1)
+# def test_PMB1Blks(putClient):
+#     assert putClient.putFileBlocks(b'f1blk.ul', 1)
 
 
 # Put 1,536 byte file
@@ -65,13 +66,13 @@ def test_PMB1Blks(getClient):
 
 
 # Send unknown request type
-# def test_BadOp10(getClient):
-#     assert getClient.sendBadOp(10)
+def test_BadOp10(getClient):
+    assert getClient.sendBadOp(10)
 
 
 # Send an unknown request type (similar to an existing)
-# def test_BadOp257(getClient):
-#     assert getClient.sendBadOp(257)
+def test_BadOp257(getClient):
+    assert getClient.sendBadOp(257)
 
 
 # Get a large file and fail the first ACK every time

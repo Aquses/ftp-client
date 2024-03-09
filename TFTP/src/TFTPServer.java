@@ -10,15 +10,14 @@ import java.net.InetSocketAddress;
 import java.net.PortUnreachableException;
 import java.net.SocketAddress;
 import java.net.SocketException;
-import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 public class TFTPServer {
 	public static final int TFTPPORT = 4970;
 	public static final int BUFSIZE = 516; // 512
-	public static final String READDIR = "C://Users//Eco-E//Desktop//assignment3//read//"; //custom address at your PC
-	public static final String WRITEDIR = "C://Users//Eco-E//Desktop//assignment3//write//"; //custom address at your PC
+	public static final String READDIR = "/read/"; //custom address at your PC # CHANGE HERE
+	public static final String WRITEDIR = "/write/"; //custom address at your PC # CHANGE HERE
 	// OP codes
 	// 1     Read request (RRQ)
 	// 2     Write request (WRQ)
