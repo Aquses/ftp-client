@@ -10,6 +10,7 @@ import java.net.InetSocketAddress;
 import java.net.PortUnreachableException;
 import java.net.SocketAddress;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
@@ -17,7 +18,7 @@ public class TFTPServer {
 	public static final int TFTPPORT = 4970;
 	public static final int BUFSIZE = 516; // 512
 	public static final String READDIR = "C://Users//Eco-E//Desktop//assignment3//read//"; //custom address at your PC
-	public static final String WRITEDIR = "/write/"; //custom address at your PC
+	public static final String WRITEDIR = "C://Users//Eco-E//Desktop//assignment3//write//"; //custom address at your PC
 	// OP codes
 	// 1     Read request (RRQ)
 	// 2     Write request (WRQ)
@@ -287,24 +288,43 @@ public class TFTPServer {
 	private boolean receive_DATA_send_ACK(DatagramSocket socket, String requestedFile) {
 		try {
 			FileOutputStream fos = new FileOutputStream(requestedFile);
-			// Received packets.
-			byte[] buf = new byte[BUFSIZE];
-			DatagramPacket receivedPacket = new DatagramPacket(buf, buf.length);
-			socket.receive(receivedPacket);
-
-			if (receivedPacket.getLength() == 0) {
-				
+			short block = 0;
+			short opcode = 0;
+			int receivedData = 512;
+	
+			sendAckPacket(socket, block);
+			while (receivedData >= 512) {
+				byte[] data = new byte[BUFSIZE];
+				DatagramPacket receive = new DatagramPacket(data, BUFSIZE);
+				socket.receive(receive);
+	
+				ByteBuffer dataBuffer = ByteBuffer.wrap(data);
+				opcode = dataBuffer.getShort();
+				block = dataBuffer.getShort();
+	
+				switch (opcode) {
+					case OP_DAT:
+						fos.write(dataBuffer.array(), 4, receive.getLength() - 4);
+						receivedData = receive.getLength();
+						sendAckPacket(socket, block);
+						block++;
+						break;  // Continue receiving data
+					case OP_ERR:
+						send_ERR(socket, (short) 0, "Error.");
+						return false;
+					default:
+						send_ERR(socket, (short) 0, "Invalid opcode.");
+						return false;
+				}
 			}
-
-
-
-		} catch (IOException e){
-			// TODO: send_ERR
-			e.printStackTrace();
+			fos.close();  // Close the file after receiving all data
+		} catch (IOException e) {
+			send_ERR(socket, (short) 0, "Error in file writing or socket communication.");
+			return false;
 		}
-
 		return true;
 	}
+	
 
 	private void sendAckPacket(DatagramSocket socket, short expectedBlock) {
 		try {
