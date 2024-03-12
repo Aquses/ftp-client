@@ -16,8 +16,8 @@ import java.util.Arrays;
 public class TFTPServer {
 	public static final int TFTPPORT = 4970;
 	public static final int BUFSIZE = 516; // 512
-	public static final String READDIR = "/read/"; //custom address at your PC # CHANGE HERE
-	public static final String WRITEDIR = "/write/"; //custom address at your PC # CHANGE HERE
+	public static final String READDIR = "/home/kenzo/Desktop/student/assignment3/read/"; //custom address at your PC # CHANGE HERE
+	public static final String WRITEDIR = "/home/kenzo/Desktop/student/assignment3/write/"; //custom address at your PC # CHANGE HERE
 	// OP codes
 	// 1     Read request (RRQ)
 	// 2     Write request (WRQ)
@@ -48,7 +48,6 @@ public class TFTPServer {
 	private void start() throws SocketException {
 		try {
 			byte[] buf= new byte[BUFSIZE];
-			
 			// Create socket
 			DatagramSocket socket= new DatagramSocket(null);
 			
@@ -83,15 +82,20 @@ public class TFTPServer {
 									clientAddress.getHostName(), clientAddress.getPort());
 					 
 							// Read request
+
 							if (reqtype == OP_RRQ) {      
 								requestedFile.insert(0, READDIR);
 								HandleRQ(sendSocket, requestedFile.toString(), OP_RRQ);
 							}
 							// Write request
-							else {                       
+							else if (reqtype == OP_WRQ){                       
 								requestedFile.insert(0, WRITEDIR);
 								HandleRQ(sendSocket,requestedFile.toString(),OP_WRQ);  
 							}
+							else {
+								HandleRQ(sendSocket, requestedFile.toString(), (int)reqtype);
+							}
+							
 							sendSocket.close();
 						} 
 						catch (SocketException e) {
@@ -152,6 +156,8 @@ public class TFTPServer {
 	private void HandleRQ(DatagramSocket sendSocket, String requestedFile, int opcode) {
 		String[] request = requestedFile.split("\0");
 		String fileName = request[0];
+
+		
 		File file = new File(fileName);
 		
 		// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
