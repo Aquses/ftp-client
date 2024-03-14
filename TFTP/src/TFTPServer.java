@@ -163,19 +163,19 @@ public class TFTPServer {
 		// See "TFTP Formats" in TFTP specification for the DATA and ACK packet contents
 		if (opcode == OP_RRQ) {
 			if (!(file.exists() && file.isFile())) {
-				send_ERR(sendSocket, (short) 1, "File not found.");
+				send_ERR(sendSocket, (char) 1, "File not found.");
 			}
 			send_DATA_receive_ACK(sendSocket, fileName);
 		}
 		else if (opcode == OP_WRQ) {
 			if (file.exists() && file.isFile()) {
-				send_ERR(sendSocket, (short) 6, "File already exists.");
+				send_ERR(sendSocket, (char) 6, "File already exists.");
 			}
 			receive_DATA_send_ACK(sendSocket, fileName);
 		}
 		else {
 			// See "TFTP Formats" in TFTP specification for the ERROR packet contents
-			send_ERR(sendSocket, (short) 4, "Illegal TFTP operation.");
+			send_ERR(sendSocket, (char) 4, "Illegal TFTP operation.");
 			return;
 		}		
 	}
@@ -203,7 +203,7 @@ public class TFTPServer {
 			fis.close();
 		} catch (IOException e) {
 			e.printStackTrace();
-			send_ERR(clientSocket, (short) 0, "Error in file reading or socket communication.");
+			send_ERR(clientSocket, (char) 0, "Error in file reading or socket communication.");
 		}
 		return true;
 	}
@@ -229,7 +229,7 @@ public class TFTPServer {
 					retryCount++;
 	
 					if (retryCount >= maxRetries) {
-						send_ERR(clientSocket, (short)0, "Server does not receive or we do not receive.");
+						send_ERR(clientSocket, (char)0, "Server does not receive or we do not receive.");
 						doneErr = true;
 						break;
 					}
@@ -242,14 +242,14 @@ public class TFTPServer {
 	private void sendDataPacket(DatagramSocket socket, byte[] data, short blockNum) {
 		try {
 			ByteBuffer bufferArray = ByteBuffer.allocate(4 + data.length);
-			bufferArray.putShort((short) OP_DAT); // adds operation code into the packet
-			bufferArray.putShort(blockNum); // adds the block number into the packet
+			bufferArray.putChar((char) OP_DAT); // adds operation code into the packet
+			bufferArray.putChar((char) blockNum); // adds the block number into the packet
 			bufferArray.put(data); // copies and transfers data into the packet
 	
 			DatagramPacket packet = new DatagramPacket(bufferArray.array(), bufferArray.position(), socket.getRemoteSocketAddress());
 			socket.send(packet);
 		} catch (IOException e) {
-			send_ERR(socket, (short) 0, "Could not send the DAT packet.");
+			send_ERR(socket, (char) 0, "Could not send the DAT packet.");
 		}
 	}
 	
@@ -262,10 +262,10 @@ public class TFTPServer {
 		try {
 			socket.receive(receivedAck);
 		} catch (PortUnreachableException e) {
-			send_ERR(socket, (short) 0, "Port Unreachable.");
+			send_ERR(socket, (char) 0, "Port Unreachable.");
 			return false;
 		} catch (IOException e) {
-			send_ERR(socket, (short) 0, "Error while receiving acknowledgment.");
+			send_ERR(socket, (char) 0, "Error while receiving acknowledgment.");
 			return false;
 		}
 
@@ -278,14 +278,14 @@ public class TFTPServer {
 				if (receivedBlock == expectedBlock) {
 					return true;
 				} else {
-					send_ERR(socket, (short) 0, "Received ACK with incorrect block number.");
+					send_ERR(socket, (char) 0, "Received ACK with incorrect block number.");
 					return false;
 				}		
 			case OP_ERR:
-				send_ERR(socket, (short) 0, "The ACK was not received.");
+				send_ERR(socket, (char) 0, "The ACK was not received.");
 				return false;
 			default:
-				send_ERR(socket, (short) 0, "Incorrect opcode received.");
+				send_ERR(socket, (char) 0, "Incorrect opcode received.");
 				return false;
 		}
 	}
@@ -293,8 +293,8 @@ public class TFTPServer {
 	private boolean receive_DATA_send_ACK(DatagramSocket socket, String requestedFile) {
 		try {
 			FileOutputStream fos = new FileOutputStream(requestedFile);
-			short block = 0;
-			short opcode = 0;
+			char block = 0;
+			char opcode = 0;
 			int receivedData = 512;
 	
 			sendAckPacket(socket, block);
@@ -304,8 +304,8 @@ public class TFTPServer {
 				socket.receive(receive);
 	
 				ByteBuffer dataBuffer = ByteBuffer.wrap(data);
-				opcode = dataBuffer.getShort();
-				block = dataBuffer.getShort();
+				opcode = dataBuffer.getChar();
+				block = dataBuffer.getChar();
 	
 				switch (opcode) {
 					case OP_DAT:
@@ -315,36 +315,36 @@ public class TFTPServer {
 						block++;
 						break;  // Continue receiving data
 					case OP_ERR:
-						send_ERR(socket, (short) 0, "Error.");
+						send_ERR(socket, (char) 0, "Error.");
 						return false;
 					default:
-						send_ERR(socket, (short) 0, "Invalid opcode.");
+						send_ERR(socket, (char) 0, "Invalid opcode.");
 						return false;
 				}
 			}
 			fos.close();  // Close the file after receiving all data
 		} catch (IOException e) {
-			send_ERR(socket, (short) 0, "Error in file writing or socket communication.");
+			send_ERR(socket, (char) 0, "Error in file writing or socket communication.");
 			return false;
 		}
 		return true;
 	}
 	
 
-	private void sendAckPacket(DatagramSocket socket, short expectedBlock) {
+	private void sendAckPacket(DatagramSocket socket, char expectedBlock) {
 		try {
 			ByteBuffer bufferArray = ByteBuffer.allocate(4);
-			bufferArray.putShort((short) OP_ACK); // adds operation code into the packet
-			bufferArray.putShort(expectedBlock); // adds the block number into the packet
+			bufferArray.putChar((char) OP_ACK); // adds operation code into the packet
+			bufferArray.putChar(expectedBlock); // adds the block number into the packet
 	
 			DatagramPacket packet = new DatagramPacket(bufferArray.array(), bufferArray.position(), socket.getRemoteSocketAddress());
 			socket.send(packet);
 		} catch (IOException e) {
-			send_ERR(socket, (short) 0, "Could not send the ACK packet.");
+			send_ERR(socket, (char) 0, "Could not send the ACK packet.");
 		}
 	}
 	
-	private void send_ERR(DatagramSocket socket, short errorCode, String errorMessage) {
+	private void send_ERR(DatagramSocket socket, char errorCode, String errorMessage) {
 		// 0  Not defined, see error message (if any).
 		// 1  File not found.
 		// 2  Access violation.
@@ -355,8 +355,8 @@ public class TFTPServer {
 		// 7  No such user.
 		int bufferSize = 5 + errorMessage.getBytes().length;
 		ByteBuffer bufferArr = ByteBuffer.allocate(bufferSize);
-		bufferArr.putShort((short) OP_ERR);
-		bufferArr.putShort(errorCode);
+		bufferArr.putChar((char) OP_ERR);
+		bufferArr.putChar((char)errorCode);
 		bufferArr.put(errorMessage.getBytes());
 		bufferArr.put((byte) 0);
 	
